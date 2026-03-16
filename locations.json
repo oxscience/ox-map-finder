@@ -1,0 +1,29 @@
+[
+  {
+    "name": "Bewegungslabor Stuttgart",
+    "type": "Arbeitgeber",
+    "address": "Königstraße 28, 70173 Stuttgart",
+    "lat": 48.7791008,
+    "lng": 9.1784267,
+    "description": "OX Partner — offene Stellen verfügbar",
+    "contact": "karriere@bewegungslabor.de"
+  },
+  {
+    "name": "Physiotherapie Müller",
+    "type": "Praxis",
+    "address": "Marienplatz 1, 80331 München",
+    "lat": 48.137499,
+    "lng": 11.5747545,
+    "description": "Zertifizierter OX Experte seit 2023",
+    "contact": "info@physio-mueller.de"
+  },
+  {
+    "name": "Rehazentrum am Park",
+    "type": "Klinik",
+    "address": "Kurfürstendamm 42, 10719 Berlin",
+    "lat": 52.5020724,
+    "lng": 13.320814,
+    "description": "OX Partner-Klinik mit Schwerpunkt Orthopädie",
+    "contact": "kontakt@reha-park.de"
+  }
+]

@@ -1,0 +1,438 @@
+{% comment %}
+  OX Map Finder — Shopify Section
+  Zeigt eine interaktive Karte mit OX Experten & Arbeitgebern.
+  Daten kommen live aus Notion via n8n Webhook (HTTPS nötig).
+  Fallback: Inline-Daten aus Notion-Sync.
+{% endcomment %}
+
+<style>
+  .ox-map-section {
+    --ox-bg: #2b3340;
+    --ox-surface: #343d4d;
+    --ox-surface-hover: #3c4656;
+    --ox-border: #4a5568;
+    --ox-text: #e8ecf1;
+    --ox-text-secondary: #9aa5b4;
+    --ox-accent: #7bafd4;
+    --ox-blue: #7bafd4;
+    --ox-green: #7cc87c;
+    --ox-orange: #e8a04a;
+    --ox-purple: #a78bda;
+    --radius: 12px;
+    --shadow: 0 2px 20px rgba(0,0,0,0.25);
+    max-width: {{ section.settings.max_width }}px;
+    margin: 0 auto;
+    padding: 24px 20px;
+  }
+
+  .ox-map-wrapper {
+    display: flex;
+    height: {{ section.settings.map_height }}px;
+    background: var(--ox-bg);
+    border-radius: var(--radius);
+    overflow: hidden;
+    box-shadow: var(--shadow);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    color: var(--ox-text);
+  }
+
+  .ox-map-wrapper * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  .ox-sidebar {
+    width: 320px;
+    min-width: 320px;
+    background: var(--ox-bg);
+    border-right: 1px solid var(--ox-border);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .ox-sidebar-header {
+    padding: 20px;
+    border-bottom: 1px solid var(--ox-border);
+  }
+
+  .ox-brand {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+
+  .ox-brand-logo {
+    width: 40px;
+    height: 40px;
+    background: var(--ox-accent);
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 800;
+    font-size: 16px;
+    color: var(--ox-bg);
+  }
+
+  .ox-brand h1 {
+    font-size: 18px;
+    font-weight: 700;
+    line-height: 1.2;
+  }
+
+  .ox-brand p {
+    font-size: 12px;
+    color: var(--ox-text-secondary);
+  }
+
+  .ox-search {
+    position: relative;
+    margin-bottom: 12px;
+  }
+
+  .ox-search svg {
+    position: absolute;
+    left: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 16px;
+    height: 16px;
+    color: var(--ox-text-secondary);
+  }
+
+  .ox-search input {
+    width: 100%;
+    padding: 10px 14px 10px 36px;
+    background: var(--ox-surface);
+    border: 1px solid var(--ox-border);
+    border-radius: 8px;
+    color: var(--ox-text);
+    font-size: 14px;
+    outline: none;
+    transition: border-color .2s;
+  }
+
+  .ox-search input::placeholder { color: var(--ox-text-secondary); }
+  .ox-search input:focus { border-color: var(--ox-accent); }
+
+  .ox-filters {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+
+  .ox-filter-btn {
+    padding: 6px 14px;
+    border-radius: 20px;
+    border: 1px solid var(--ox-border);
+    background: transparent;
+    color: var(--ox-text-secondary);
+    font-size: 13px;
+    cursor: pointer;
+    transition: all .2s;
+    font-family: inherit;
+  }
+
+  .ox-filter-btn:hover { background: var(--ox-surface); color: var(--ox-text); }
+  .ox-filter-btn.active { background: var(--ox-accent); color: var(--ox-bg); border-color: var(--ox-accent); font-weight: 600; }
+
+  .ox-count {
+    padding: 10px 20px;
+    font-size: 12px;
+    color: var(--ox-text-secondary);
+    border-bottom: 1px solid var(--ox-border);
+  }
+
+  .ox-location-list {
+    flex: 1;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--ox-border) transparent;
+  }
+
+  .ox-location-item {
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--ox-border);
+    cursor: pointer;
+    transition: background .15s;
+  }
+
+  .ox-location-item:hover { background: var(--ox-surface); }
+
+  .ox-location-name {
+    font-weight: 600;
+    font-size: 15px;
+    margin-bottom: 4px;
+  }
+
+  .ox-location-type {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 11px;
+    font-weight: 600;
+    margin-bottom: 6px;
+  }
+
+  .ox-type-praxis { background: rgba(123,175,212,.15); color: var(--ox-blue); }
+  .ox-type-klinik { background: rgba(124,200,124,.15); color: var(--ox-green); }
+  .ox-type-arbeitgeber { background: rgba(232,160,74,.15); color: var(--ox-orange); }
+  .ox-type-verein { background: rgba(167,139,218,.15); color: var(--ox-purple); }
+
+  .ox-location-address {
+    font-size: 13px;
+    color: var(--ox-text-secondary);
+    margin-bottom: 4px;
+  }
+
+  .ox-location-desc {
+    font-size: 13px;
+    color: var(--ox-text-secondary);
+    font-style: italic;
+  }
+
+  .ox-location-contact {
+    font-size: 12px;
+    color: var(--ox-accent);
+    margin-top: 4px;
+  }
+
+  .ox-map-container {
+    flex: 1;
+    position: relative;
+  }
+
+  .ox-map-container .leaflet-container { background: var(--ox-bg) !important; }
+  .ox-map-container .leaflet-tile-pane { filter: brightness(0.75) saturate(0.4) contrast(1.1); }
+  .ox-map-container .leaflet-control-zoom a {
+    background: var(--ox-surface) !important;
+    color: var(--ox-text) !important;
+    border-color: var(--ox-border) !important;
+  }
+  .ox-map-container .leaflet-control-zoom a:hover { background: var(--ox-surface-hover) !important; }
+  .ox-map-container .leaflet-control-attribution {
+    background: rgba(43,51,64,.85) !important;
+    color: var(--ox-text-secondary) !important;
+    font-size: 10px !important;
+  }
+  .ox-map-container .leaflet-control-attribution a { color: var(--ox-accent) !important; }
+
+  .ox-map-container .leaflet-popup-content-wrapper {
+    background: var(--ox-surface) !important;
+    color: var(--ox-text) !important;
+    border-radius: 10px !important;
+    box-shadow: 0 4px 20px rgba(0,0,0,.4) !important;
+  }
+  .ox-map-container .leaflet-popup-tip { background: var(--ox-surface) !important; }
+  .ox-map-container .leaflet-popup-content { font-family: inherit !important; }
+
+  @media (max-width: 600px) {
+    .ox-map-section { padding: 20px 12px; }
+    .ox-map-wrapper { flex-direction: column; height: auto; }
+    .ox-sidebar { width: 100%; min-width: auto; max-height: 300px; border-right: none; border-bottom: 1px solid var(--ox-border); }
+    .ox-map-container { height: 400px; }
+  }
+</style>
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<section class="ox-map-section">
+  <div class="ox-map-wrapper">
+    <aside class="ox-sidebar">
+      <div class="ox-sidebar-header">
+        {% if section.settings.show_brand %}
+        <div class="ox-brand">
+          <div class="ox-brand-logo">OX</div>
+          <div>
+            <h1>Standorte finden</h1>
+            <p>OX Experten &amp; Arbeitgeber in deiner N&auml;he</p>
+          </div>
+        </div>
+        {% endif %}
+        <div class="ox-search">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+          <input type="text" id="ox-search-input" placeholder="Stadt, Name oder PLZ suchen...">
+        </div>
+        <div class="ox-filters">
+          <button class="ox-filter-btn active" data-type="all">Alle</button>
+          <button class="ox-filter-btn" data-type="Praxis">Praxis</button>
+          <button class="ox-filter-btn" data-type="Klinik">Klinik</button>
+          <button class="ox-filter-btn" data-type="Arbeitgeber">Arbeitgeber</button>
+          <button class="ox-filter-btn" data-type="Verein">Verein</button>
+        </div>
+      </div>
+      <div class="ox-count" id="ox-count">Standorte werden geladen...</div>
+      <div class="ox-location-list" id="ox-location-list"></div>
+    </aside>
+    <div class="ox-map-container" id="ox-map"></div>
+  </div>
+</section>
+
+<script>
+(function() {
+  var WEBHOOK_URL = '{{ section.settings.webhook_url }}';
+
+  /* Fallback-Daten aus Notion-Sync — werden genutzt wenn Webhook nicht erreichbar */
+  var FALLBACK_DATA = [
+    {"name":"Bewegungslabor Stuttgart","type":"Arbeitgeber","address":"Königstraße 28, 70173 Stuttgart","lat":48.7791008,"lng":9.1784267,"description":"OX Partner — offene Stellen verfügbar","contact":"karriere@bewegungslabor.de"},
+    {"name":"Physiotherapie Müller","type":"Praxis","address":"Marienplatz 1, 80331 München","lat":48.137499,"lng":11.5747545,"description":"Zertifizierter OX Experte seit 2023","contact":"info@physio-mueller.de"},
+    {"name":"Rehazentrum am Park","type":"Klinik","address":"Kurfürstendamm 42, 10719 Berlin","lat":52.5020724,"lng":13.320814,"description":"OX Partner-Klinik mit Schwerpunkt Orthopädie","contact":"kontakt@reha-park.de"},
+    {"name":"Werder Bremen","type":"Verein","address":"Franz-Böhmert-Straße 1c, 28205 Bremen","lat":53.0670511,"lng":8.8388807,"description":"Zertifizierter OX Experte seit 2023","contact":"info@werder.de"}
+  ];
+
+  var map = L.map('ox-map', { zoomControl: false }).setView([51.1657, 10.4515], 6);
+
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+    attribution: '&copy; <a href="https://osm.org/copyright">OSM</a> &copy; <a href="https://carto.com/">CARTO</a>',
+    maxZoom: 19
+  }).addTo(map);
+
+  L.control.zoom({ position: 'topright' }).addTo(map);
+
+  var markerColors = { Praxis: '#7bafd4', Klinik: '#7cc87c', Arbeitgeber: '#e8a04a', Verein: '#a78bda' };
+  var markerIcons = { Praxis: '\u2695', Klinik: '\uD83C\uDFE5', Arbeitgeber: '\uD83D\uDCBC', Verein: '\u26BD' };
+
+  function createIcon(type) {
+    var color = markerColors[type] || '#7bafd4';
+    var icon = markerIcons[type] || '\u2695';
+    return L.divIcon({
+      className: '',
+      html: '<div style="width:32px;height:32px;background:' + color + ';border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;box-shadow:0 2px 8px rgba(0,0,0,.3);border:2px solid rgba(255,255,255,.3);cursor:pointer">' + icon + '</div>',
+      iconSize: [32, 32],
+      iconAnchor: [16, 16]
+    });
+  }
+
+  var allLocations = [];
+  var markers = [];
+  var activeFilter = 'all';
+
+  function renderList(locations) {
+    var list = document.getElementById('ox-location-list');
+    var count = document.getElementById('ox-count');
+    count.textContent = locations.length + ' Standort' + (locations.length !== 1 ? 'e' : '') + ' gefunden';
+
+    list.innerHTML = locations.map(function(loc, i) {
+      var typeClass = 'ox-type-' + loc.type.toLowerCase();
+      return '<div class="ox-location-item" data-index="' + i + '">' +
+        '<div class="ox-location-name">' + loc.name + '</div>' +
+        '<span class="ox-location-type ' + typeClass + '">' + loc.type + '</span>' +
+        '<div class="ox-location-address">' + loc.address + '</div>' +
+        (loc.description ? '<div class="ox-location-desc">' + loc.description + '</div>' : '') +
+        (loc.contact ? '<div class="ox-location-contact">' + loc.contact + '</div>' : '') +
+        '</div>';
+    }).join('');
+
+    list.querySelectorAll('.ox-location-item').forEach(function(item) {
+      item.addEventListener('click', function() {
+        var idx = parseInt(this.dataset.index);
+        var loc = locations[idx];
+        map.setView([loc.lat, loc.lng], 14);
+        markers.forEach(function(m) {
+          if (m._oxLoc === loc) m.openPopup();
+        });
+      });
+    });
+  }
+
+  function updateMarkers(locations) {
+    markers.forEach(function(m) { map.removeLayer(m); });
+    markers = [];
+    locations.forEach(function(loc) {
+      var m = L.marker([loc.lat, loc.lng], { icon: createIcon(loc.type) })
+        .bindPopup('<div style="min-width:180px"><strong>' + loc.name + '</strong><br><small style="color:' + (markerColors[loc.type] || '#7bafd4') + '">' + loc.type + '</small><br><span style="color:#9aa5b4">' + loc.address + '</span>' + (loc.description ? '<br><em style="color:#9aa5b4;font-size:12px">' + loc.description + '</em>' : '') + (loc.contact ? '<br><a href="mailto:' + loc.contact + '" style="color:#7bafd4;font-size:12px">' + loc.contact + '</a>' : '') + '</div>')
+        .addTo(map);
+      m._oxLoc = loc;
+      markers.push(m);
+    });
+    if (markers.length) {
+      var group = L.featureGroup(markers);
+      map.fitBounds(group.getBounds().pad(0.15));
+    }
+  }
+
+  function applyFilters() {
+    var search = document.getElementById('ox-search-input').value.toLowerCase();
+    var filtered = allLocations.filter(function(loc) {
+      var matchType = activeFilter === 'all' || loc.type === activeFilter;
+      var matchSearch = !search || loc.name.toLowerCase().includes(search) || loc.address.toLowerCase().includes(search) || (loc.description && loc.description.toLowerCase().includes(search));
+      return matchType && matchSearch;
+    });
+    renderList(filtered);
+    updateMarkers(filtered);
+  }
+
+  document.querySelectorAll('.ox-filter-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      document.querySelectorAll('.ox-filter-btn').forEach(function(b) { b.classList.remove('active'); });
+      this.classList.add('active');
+      activeFilter = this.dataset.type;
+      applyFilters();
+    });
+  });
+
+  document.getElementById('ox-search-input').addEventListener('input', applyFilters);
+
+  function loadData(data) {
+    allLocations = data;
+    applyFilters();
+  }
+
+  /* Versuche Webhook, falle auf Inline-Daten zurück */
+  if (WEBHOOK_URL && WEBHOOK_URL.indexOf('http') === 0) {
+    fetch(WEBHOOK_URL)
+      .then(function(r) { return r.json(); })
+      .then(function(data) { loadData(data); })
+      .catch(function() { loadData(FALLBACK_DATA); });
+  } else {
+    loadData(FALLBACK_DATA);
+  }
+
+  setTimeout(function() { map.invalidateSize(); }, 100);
+})();
+</script>
+
+{% schema %}
+{
+  "name": "OX Map Finder",
+  "settings": [
+    {
+      "type": "text",
+      "id": "webhook_url",
+      "label": "n8n Webhook URL (HTTPS)",
+      "default": "https://campus.outoftheb-ox.de/ox-api/locations",
+      "info": "HTTPS-URL zum n8n Webhook für live Notion-Daten."
+    },
+    {
+      "type": "range",
+      "id": "max_width",
+      "label": "Maximale Breite (px)",
+      "min": 800,
+      "max": 1600,
+      "step": 50,
+      "default": 1200
+    },
+    {
+      "type": "range",
+      "id": "map_height",
+      "label": "Kartenhöhe (px)",
+      "min": 400,
+      "max": 900,
+      "step": 50,
+      "default": 500
+    },
+    {
+      "type": "checkbox",
+      "id": "show_brand",
+      "label": "OX Branding anzeigen",
+      "default": true
+    }
+  ],
+  "presets": [
+    {
+      "name": "OX Map Finder",
+      "category": "Custom"
+    }
+  ]
+}
+{% endschema %}

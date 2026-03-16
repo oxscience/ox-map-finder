@@ -1,0 +1,91 @@
+{
+  "name": "OX Map Finder",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "ox-locations",
+        "responseMode": "responseNode",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              { "name": "Access-Control-Allow-Origin", "value": "*" }
+            ]
+          }
+        }
+      },
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 0],
+      "webhookId": "ox-locations"
+    },
+    {
+      "parameters": {
+        "resource": "databasePage",
+        "operation": "getAll",
+        "databaseId": "324849a1-3673-8168-b3bd-ed7646f25597",
+        "returnAll": true,
+        "options": {}
+      },
+      "name": "Notion Standorte",
+      "type": "n8n-nodes-base.notion",
+      "typeVersion": 2.2,
+      "position": [220, 0],
+      "credentials": {
+        "notionApi": {
+          "id": "notion-cred",
+          "name": "Notion API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const locations = [];\nfor (const item of $input.all()) {\n  const d = item.json;\n  const name = d.property_name || d.name || '';\n  const typ = d.property_typ || 'Praxis';\n  const adresse = d.property_adresse || '';\n  const beschreibung = d.property_beschreibung || '';\n  const kontakt = d.property_kontakt || '';\n  if (!name || !adresse) continue;\n  const encoded = encodeURIComponent(adresse);\n  const geoUrl = 'https://nominatim.openstreetmap.org/search?q=' + encoded + '&format=json&limit=1';\n  try {\n    const response = await fetch(geoUrl, { headers: { 'User-Agent': 'OX-Map-Finder/1.0' } });\n    const results = await response.json();\n    if (results.length > 0) {\n      locations.push({ name, type: typ, address: adresse, lat: parseFloat(results[0].lat), lng: parseFloat(results[0].lon), description: beschreibung, contact: kontakt });\n    }\n  } catch (e) {}\n}\nreturn [{ json: { locations } }];"
+      },
+      "name": "Geocoding Format",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [440, 0]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json.locations) }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              { "name": "Content-Type", "value": "application/json" },
+              { "name": "Access-Control-Allow-Origin", "value": "*" },
+              { "name": "Cache-Control", "value": "public, max-age=300" }
+            ]
+          }
+        }
+      },
+      "name": "Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [660, 0]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [{ "node": "Notion Standorte", "type": "main", "index": 0 }]
+      ]
+    },
+    "Notion Standorte": {
+      "main": [
+        [{ "node": "Geocoding Format", "type": "main", "index": 0 }]
+      ]
+    },
+    "Geocoding Format": {
+      "main": [
+        [{ "node": "Response", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

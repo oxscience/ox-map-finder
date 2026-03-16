@@ -1,0 +1,13 @@
+{
+  "sections": {
+    "ox-map": {
+      "type": "ox-map-finder",
+      "settings": {
+        "webhook_url": "http://46.224.200.248:5678/webhook/ox-locations",
+        "map_height": 650,
+        "show_brand": true
+      }
+    }
+  },
+  "order": ["ox-map"]
+}
